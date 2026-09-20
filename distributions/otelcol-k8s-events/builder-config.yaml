@@ -28,6 +28,7 @@ processors:
   - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.160.0
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.160.0
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/logdedupprocessor v0.160.0
 
 connectors:
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/connector/routingconnector v0.160.0
