@@ -4,7 +4,6 @@
 package notificationexporter // import "github.com/ucpr/opentelemetry-collector-components/exporters/notificationexporter"
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -42,13 +41,6 @@ const (
 	// bot token, rather than a Discord Incoming Webhook URL. Requires
 	// DiscordBot.Token and DiscordBot.ChannelID.
 	TypeDiscordBot = "discord_bot"
-)
-
-const (
-	slackPostMessageEndpoint             = "https://slack.com/api/chat.postMessage"
-	discordChannelMessagesEndpointFormat = "https://discord.com/api/v10/channels/%s/messages"
-
-	defaultDiscordBodyTemplate = `{"content": {{ printf "[%s] %s" .SeverityText .Body | toJson }}}`
 )
 
 // SlackAppConfig holds settings for Config.Type == TypeSlackApp.
@@ -139,49 +131,12 @@ func (cfg *Config) effectiveType() string {
 func (cfg *Config) Validate() error {
 	var errs error
 
-	switch cfg.effectiveType() {
-	case TypeWebhook:
-		if cfg.ClientConfig.Endpoint == "" {
-			errs = multierr.Append(errs, errors.New("endpoint must be specified"))
+	if d, ok := destinations[cfg.effectiveType()]; ok {
+		if err := d.configure(cfg); err != nil {
+			errs = multierr.Append(errs, err)
 		}
-	case TypeSlackApp:
-		if cfg.SlackApp.Token == "" {
-			errs = multierr.Append(errs, errors.New("slack_app.token must be specified"))
-		}
-		if cfg.SlackApp.Channel == "" {
-			errs = multierr.Append(errs, errors.New("slack_app.channel must be specified"))
-		}
-		if cfg.ClientConfig.Endpoint == "" {
-			cfg.ClientConfig.Endpoint = slackPostMessageEndpoint
-		}
-		if cfg.BodyTemplate == "" && cfg.BodyTemplateFile == "" {
-			// channel is config-supplied (not per-record log data), so a
-			// single json.Marshal here is enough to embed it safely as a
-			// JSON string literal in the generated template source.
-			channel, _ := json.Marshal(cfg.SlackApp.Channel)
-			cfg.BodyTemplate = fmt.Sprintf(`{"channel": %s, "text": {{ printf "[%%s] %%s" .SeverityText .Body | toJson }}}`, channel)
-		}
-	case TypeDiscordWebhook:
-		if cfg.ClientConfig.Endpoint == "" {
-			errs = multierr.Append(errs, errors.New("endpoint must be specified"))
-		}
-		if cfg.BodyTemplate == "" && cfg.BodyTemplateFile == "" {
-			cfg.BodyTemplate = defaultDiscordBodyTemplate
-		}
-	case TypeDiscordBot:
-		if cfg.DiscordBot.Token == "" {
-			errs = multierr.Append(errs, errors.New("discord_bot.token must be specified"))
-		}
-		if cfg.DiscordBot.ChannelID == "" {
-			errs = multierr.Append(errs, errors.New("discord_bot.channel_id must be specified"))
-		} else if cfg.ClientConfig.Endpoint == "" {
-			cfg.ClientConfig.Endpoint = fmt.Sprintf(discordChannelMessagesEndpointFormat, cfg.DiscordBot.ChannelID)
-		}
-		if cfg.BodyTemplate == "" && cfg.BodyTemplateFile == "" {
-			cfg.BodyTemplate = defaultDiscordBodyTemplate
-		}
-	default:
-		errs = multierr.Append(errs, fmt.Errorf("type must be one of %q, %q, %q, %q, got %q", TypeWebhook, TypeSlackApp, TypeDiscordWebhook, TypeDiscordBot, cfg.Type))
+	} else {
+		errs = multierr.Append(errs, fmt.Errorf("type must be one of %s, got %q", quotedSupportedTypes(), cfg.Type))
 	}
 
 	switch strings.ToUpper(cfg.Method) {
