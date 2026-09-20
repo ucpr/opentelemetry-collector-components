@@ -59,6 +59,34 @@ func TestLoadConfig(t *testing.T) {
 				return cfg
 			}(),
 		},
+		{
+			id: component.NewIDWithName(metadata.Type, "slack-app"),
+			expected: func() *Config {
+				cfg := createDefaultConfig().(*Config)
+				cfg.Type = TypeSlackApp
+				cfg.SlackApp = SlackAppConfig{
+					Token:   "xoxb-000-000-abc",
+					Channel: "#alerts",
+				}
+				cfg.ClientConfig.Endpoint = slackPostMessageEndpoint
+				cfg.BodyTemplate = `{"channel": "#alerts", "text": {{ printf "[%s] %s" .SeverityText .Body | toJson }}}`
+				return cfg
+			}(),
+		},
+		{
+			id: component.NewIDWithName(metadata.Type, "discord-bot"),
+			expected: func() *Config {
+				cfg := createDefaultConfig().(*Config)
+				cfg.Type = TypeDiscordBot
+				cfg.DiscordBot = DiscordBotConfig{
+					Token:     "Bot000.abc",
+					ChannelID: "123456789012345678",
+				}
+				cfg.ClientConfig.Endpoint = "https://discord.com/api/v10/channels/123456789012345678/messages"
+				cfg.BodyTemplate = defaultDiscordBodyTemplate
+				return cfg
+			}(),
+		},
 	}
 
 	for _, tt := range tests {
@@ -139,6 +167,88 @@ func TestConfig_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "unknown type",
+			cfg: &Config{
+				Type:   "carrier-pigeon",
+				Method: http.MethodPost,
+			},
+			wantErr: true,
+		},
+		{
+			name: "slack_app: valid, defaults endpoint and body_template",
+			cfg: &Config{
+				Type:   TypeSlackApp,
+				Method: http.MethodPost,
+				SlackApp: SlackAppConfig{
+					Token:   "xoxb-000",
+					Channel: "#alerts",
+				},
+			},
+		},
+		{
+			name: "slack_app: missing token",
+			cfg: &Config{
+				Type:     TypeSlackApp,
+				Method:   http.MethodPost,
+				SlackApp: SlackAppConfig{Channel: "#alerts"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "slack_app: missing channel",
+			cfg: &Config{
+				Type:     TypeSlackApp,
+				Method:   http.MethodPost,
+				SlackApp: SlackAppConfig{Token: "xoxb-000"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "discord_webhook: valid, defaults body_template",
+			cfg: &Config{
+				Type:         TypeDiscordWebhook,
+				Method:       http.MethodPost,
+				ClientConfig: validClientConfig(),
+			},
+		},
+		{
+			name: "discord_webhook: missing endpoint",
+			cfg: &Config{
+				Type:   TypeDiscordWebhook,
+				Method: http.MethodPost,
+			},
+			wantErr: true,
+		},
+		{
+			name: "discord_bot: valid, defaults endpoint from channel_id and body_template",
+			cfg: &Config{
+				Type:   TypeDiscordBot,
+				Method: http.MethodPost,
+				DiscordBot: DiscordBotConfig{
+					Token:     "Bot000",
+					ChannelID: "123",
+				},
+			},
+		},
+		{
+			name: "discord_bot: missing token",
+			cfg: &Config{
+				Type:       TypeDiscordBot,
+				Method:     http.MethodPost,
+				DiscordBot: DiscordBotConfig{ChannelID: "123"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "discord_bot: missing channel_id",
+			cfg: &Config{
+				Type:       TypeDiscordBot,
+				Method:     http.MethodPost,
+				DiscordBot: DiscordBotConfig{Token: "Bot000"},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -151,6 +261,48 @@ func TestConfig_Validate(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+
+	t.Run("slack_app: fills in endpoint and body_template", func(t *testing.T) {
+		cfg := &Config{
+			Type:   TypeSlackApp,
+			Method: http.MethodPost,
+			SlackApp: SlackAppConfig{
+				Token:   "xoxb-000",
+				Channel: "#alerts",
+			},
+		}
+		require.NoError(t, cfg.Validate())
+		assert.Equal(t, slackPostMessageEndpoint, cfg.ClientConfig.Endpoint)
+		assert.Equal(t, `{"channel": "#alerts", "text": {{ printf "[%s] %s" .SeverityText .Body | toJson }}}`, cfg.BodyTemplate)
+	})
+
+	t.Run("slack_app: explicit body_template is not overwritten", func(t *testing.T) {
+		cfg := &Config{
+			Type:   TypeSlackApp,
+			Method: http.MethodPost,
+			SlackApp: SlackAppConfig{
+				Token:   "xoxb-000",
+				Channel: "#alerts",
+			},
+			BodyTemplate: `{"channel": "#alerts", "blocks": []}`,
+		}
+		require.NoError(t, cfg.Validate())
+		assert.Equal(t, `{"channel": "#alerts", "blocks": []}`, cfg.BodyTemplate)
+	})
+
+	t.Run("discord_bot: fills in endpoint from channel_id and body_template", func(t *testing.T) {
+		cfg := &Config{
+			Type:   TypeDiscordBot,
+			Method: http.MethodPost,
+			DiscordBot: DiscordBotConfig{
+				Token:     "Bot000",
+				ChannelID: "123456789012345678",
+			},
+		}
+		require.NoError(t, cfg.Validate())
+		assert.Equal(t, "https://discord.com/api/v10/channels/123456789012345678/messages", cfg.ClientConfig.Endpoint)
+		assert.Equal(t, defaultDiscordBodyTemplate, cfg.BodyTemplate)
+	})
 
 	t.Run("lower-case method is normalized to canonical upper-case", func(t *testing.T) {
 		cfg := &Config{

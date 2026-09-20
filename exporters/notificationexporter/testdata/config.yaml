@@ -10,3 +10,15 @@ notification/inline:
 notification/file:
   endpoint: https://example.com/webhook
   body_template_file: testdata/body.tmpl
+
+notification/slack-app:
+  type: slack_app
+  slack_app:
+    token: xoxb-000-000-abc
+    channel: "#alerts"
+
+notification/discord-bot:
+  type: discord_bot
+  discord_bot:
+    token: Bot000.abc
+    channel_id: "123456789012345678"

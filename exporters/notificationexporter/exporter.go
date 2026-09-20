@@ -147,6 +147,7 @@ func (e *notificationExporter) send(ctx context.Context, rl plog.ResourceLogs, s
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
+	e.setAuthHeaders(req)
 
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -159,6 +160,25 @@ func (e *notificationExporter) send(ctx context.Context, rl plog.ResourceLogs, s
 		return fmt.Errorf("notification endpoint returned status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// setAuthHeaders adds the Authorization/Content-Type headers implied by the
+// exporter's Type, for destinations authenticated via a bot token rather
+// than a pre-authenticated webhook URL. confighttp's `headers:` config is
+// applied by the HTTP client's transport when the request is actually sent
+// (after this runs), so an explicit `headers:` entry still wins over these
+// defaults if the user sets one.
+func (e *notificationExporter) setAuthHeaders(req *http.Request) {
+	switch e.config.effectiveType() {
+	case TypeSlackApp:
+		req.Header.Set("Authorization", "Bearer "+string(e.config.SlackApp.Token))
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	case TypeDiscordBot:
+		req.Header.Set("Authorization", "Bot "+string(e.config.DiscordBot.Token))
+		req.Header.Set("Content-Type", "application/json")
+	case TypeDiscordWebhook:
+		req.Header.Set("Content-Type", "application/json")
+	}
 }
 
 // appendFailedRecord copies rl/sl/lr into dst, preserving resource and scope

@@ -46,7 +46,8 @@ func newLogs(severity string, body string) plog.Logs {
 }
 
 type capturedRequest struct {
-	body string
+	body    string
+	headers http.Header
 }
 
 func newCapturingServer(t *testing.T, status int) (*httptest.Server, *[]capturedRequest) {
@@ -58,7 +59,7 @@ func newCapturingServer(t *testing.T, status int) (*httptest.Server, *[]captured
 		b, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		mu.Lock()
-		got = append(got, capturedRequest{body: string(b)})
+		got = append(got, capturedRequest{body: string(b), headers: r.Header.Clone()})
 		mu.Unlock()
 		w.WriteHeader(status)
 	}))
@@ -110,6 +111,54 @@ func TestPushLogs_ReturnsPartialFailureForFailedDelivery(t *testing.T) {
 	var logsErr consumererror.Logs
 	require.ErrorAs(t, err, &logsErr)
 	assert.Equal(t, 1, logsErr.Data().LogRecordCount())
+}
+
+func TestPushLogs_SlackApp_SetsBearerAuthHeader(t *testing.T) {
+	srv, got := newCapturingServer(t, http.StatusOK)
+	e := newTestExporter(t, srv, &Config{
+		Type:         TypeSlackApp,
+		Method:       http.MethodPost,
+		SlackApp:     SlackAppConfig{Token: "xoxb-000", Channel: "#alerts"},
+		BodyTemplate: `{"channel": "#alerts", "text": {{ .Body | toJson }}}`,
+	})
+
+	err := e.pushLogs(context.Background(), newLogs("Warning", "pod crashed"))
+	require.NoError(t, err)
+
+	require.Len(t, *got, 1)
+	assert.Equal(t, "Bearer xoxb-000", (*got)[0].headers.Get("Authorization"))
+	assert.JSONEq(t, `{"channel": "#alerts", "text": "pod crashed"}`, (*got)[0].body)
+}
+
+func TestPushLogs_DiscordBot_SetsBotAuthHeader(t *testing.T) {
+	srv, got := newCapturingServer(t, http.StatusOK)
+	e := newTestExporter(t, srv, &Config{
+		Type:         TypeDiscordBot,
+		Method:       http.MethodPost,
+		DiscordBot:   DiscordBotConfig{Token: "Bot000", ChannelID: "123"},
+		BodyTemplate: defaultDiscordBodyTemplate,
+	})
+
+	err := e.pushLogs(context.Background(), newLogs("Warning", "pod crashed"))
+	require.NoError(t, err)
+
+	require.Len(t, *got, 1)
+	assert.Equal(t, "Bot Bot000", (*got)[0].headers.Get("Authorization"))
+	assert.JSONEq(t, `{"content": "[Warning] pod crashed"}`, (*got)[0].body)
+}
+
+func TestPushLogs_Webhook_DoesNotSetAuthHeader(t *testing.T) {
+	srv, got := newCapturingServer(t, http.StatusOK)
+	e := newTestExporter(t, srv, &Config{
+		Method:       http.MethodPost,
+		BodyTemplate: `{"text": {{ .Body | toJson }}}`,
+	})
+
+	err := e.pushLogs(context.Background(), newLogs("Warning", "pod crashed"))
+	require.NoError(t, err)
+
+	require.Len(t, *got, 1)
+	assert.Empty(t, (*got)[0].headers.Get("Authorization"))
 }
 
 func TestPushLogs_InvalidConditionSyntaxFailsAtConstruction(t *testing.T) {
