@@ -6,6 +6,11 @@
 
 FROM golang:1.26-bookworm AS builder
 ENV GOTOOLCHAIN=auto
+# The repo root's go.work (copied in below) must not apply to the OCB-generated
+# _build module: it's a standalone module with its own go.mod/replace directives,
+# not a member of that workspace, and Go's workspace auto-detection would
+# otherwise refuse to build it from inside the copied repo tree.
+ENV GOWORK=off
 
 WORKDIR /src
 COPY . .
