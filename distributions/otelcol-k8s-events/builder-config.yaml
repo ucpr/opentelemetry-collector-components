@@ -1,0 +1,48 @@
+# OpenTelemetry Collector Builder (OCB) manifest for the "otelcol-k8s-events" distribution.
+#
+# This distribution exists to run one job: watch Kubernetes events and deliver notifications
+# (e.g. to Slack) for the ones that matter. It intentionally includes only the components that
+# pipeline needs — see ../../exporters/notificationexporter/spec.md for the pipeline shape and
+# rationale.
+#
+# Build with:
+#   go install go.opentelemetry.io/collector/cmd/builder@v0.160.0
+#   builder --config=distributions/otelcol-k8s-events/builder-config.yaml
+#
+# Component versions are pinned to the same opentelemetry-collector-contrib release train
+# (v0.160.0 / core v1.66.0) as the otel/opentelemetry-collector-contrib:0.160.0 image already
+# running in ucpr/infra, cross-referenced against the real otelcol-contrib distribution manifest
+# for that tag.
+dist:
+  name: otelcol-k8s-events
+  description: "Custom OpenTelemetry Collector distribution: Kubernetes events -> notification delivery"
+  module: github.com/ucpr/opentelemetry-collector-components/distributions/otelcol-k8s-events
+  version: 0.1.0
+  output_path: ./_build
+
+receivers:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8seventsreceiver v0.160.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.160.0
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.160.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.160.0
+
+connectors:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/connector/routingconnector v0.160.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.160.0
+  - gomod: github.com/ucpr/opentelemetry-collector-components/exporters/notificationexporter v0.0.0-00010101000000-000000000000
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.66.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.66.0
+
+replaces:
+  # Build against the local, not-yet-published notificationexporter module in this same repo.
+  # NOTE: OCB resolves this path relative to `output_path` (./_build), not relative to this file,
+  # hence the extra `../` compared to what the on-disk layout would otherwise suggest.
+  - github.com/ucpr/opentelemetry-collector-components/exporters/notificationexporter => ../../../exporters/notificationexporter

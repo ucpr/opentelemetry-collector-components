@@ -1,0 +1,22 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Build artifacts
+/bin/
+/dist/
+
+# OCB (opentelemetry-collector-builder) generated distribution sources/binaries
+distributions/*/_build/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store

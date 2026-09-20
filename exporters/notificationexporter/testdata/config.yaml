@@ -1,0 +1,12 @@
+notification/inline:
+  endpoint: https://hooks.slack.com/services/T000/B000/XXXX
+  method: POST
+  headers:
+    content-type: application/json
+  condition: severity_text == "Warning"
+  body_template: |
+    {"text": {{ .Body | toJson }}}
+
+notification/file:
+  endpoint: https://example.com/webhook
+  body_template_file: testdata/body.tmpl
