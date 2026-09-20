@@ -16,10 +16,25 @@ jobs:
           go-version-file: go.work
 
       - name: go build
-        run: go build ./...
+        run: |
+          for mod in $(go list -m -f '{{if not .Version}}{{.Dir}}{{end}}' all); do
+            echo "::group::go build ($mod)"
+            (cd "$mod" && go build ./...)
+            echo "::endgroup::"
+          done
 
       - name: go vet
-        run: go vet ./...
+        run: |
+          for mod in $(go list -m -f '{{if not .Version}}{{.Dir}}{{end}}' all); do
+            echo "::group::go vet ($mod)"
+            (cd "$mod" && go vet ./...)
+            echo "::endgroup::"
+          done
 
       - name: go test
-        run: go test ./... -v
+        run: |
+          for mod in $(go list -m -f '{{if not .Version}}{{.Dir}}{{end}}' all); do
+            echo "::group::go test ($mod)"
+            (cd "$mod" && go test ./... -v)
+            echo "::endgroup::"
+          done
